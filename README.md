@@ -1,35 +1,56 @@
-# PowerShelli Juhuslike Kasutajate Generaator 🎲
+# Windowsi Kasutajakontode Automatiseerimine (PowerShell) 🚀
 
-PowerShelli automatiseerimisskript, mis on loodud õppe- ja testimiseesmärkidel. See genereerib **5 juhuslikku kasutajakontot**, miksides andmeid lähtefailidest. Skript puhastab kasutajanimed erimärkidest ja pakub käivitamisel paindlikku parooli seadistamise võimalust.
+See projekt koosneb kahest PowerShelli skriptist, mis on loodud Windowsi kasutajakontode massiliseks haldamiseks. Esimene skript genereerib andmed ja teine skript loob nende põhjal reaalsed süsteemikasutajad, seadistades paroolipoliitika ja grupiõigused.
 
-## 🚀 Funktsionaalsus
+## 📂 Failide Kirjeldus
 
-- **Juhuslik genereerimine**: Valib sisendfailidest automaatselt suvalised eesnimed, perenimed ja kirjeldused.
-- **Kasutajanime puhastamine**: 
-  - Teisendab nimed puhtale kujule `eesnimi.perenimi`.
-  - Eemaldab täpitähed (nt `õ, ä, ö, ü` -> `o, a, o, u`).
-  - Eemaldab tühikud ja sidekriipsud.
-- **Paindlik parooliloogika**: 
-  - **Staatiline režiim**: Määra üks kindel parool kõigile 5 kasutajale.
-  - **Juhuslik režiim**: Genereeri igale kasutajale unikaalne ja turvaline parool (5-9 märki).
-- **CSV Eksport**: Väljastab struktureeritud CSV faili, kasutades semikoolonit (`;`) eraldajana, mis sobib Exceli või Active Directory impordiks.
+### 1. `generate_users.ps1` (Andmete genereerija)
+See skript valmistab ette andmed kasutajate loomiseks.
+- **Sisend:** Loeb nimed ja ametikirjeldused failidest `Eesnimed.txt`, `Perenimed.txt` ja `Kirjeldused.txt`.
+- **Töötlus:** 
+  - Genereerib suvalised kasutajad.
+  - Puhastab nimed täpitähtedest (nt `Jüri` -> `juri`).
+  - Loob unikaalsed paroolid (või kasutab ühist parooli).
+- **Väljund:** Salvestab tulemuse faili `new_users_accounts.csv`.
 
-## 📂 Projekti struktuur
+### 2. `manage_users.ps1` (Süsteemi haldur)
+See skript teeb tegelikud muudatused arvutis (Admin õigustega).
+- **Interaktiivne menüü:** Võimaldab valida lisamise ja kustutamise vahel.
+- **Lisamine:** 
+  - Loeb CSV faili ja loob kasutajad Windowsi süsteemi.
+  - Lisab kasutajad `Users` gruppi.
+  - **Nõuab parooli vahetust:** Esmakordsel sisselogimisel peab kasutaja parooli muutma.
+  - Kontrollib nime pikkust (max 20) ja duplikaate.
+- **Kustutamine:**
+  - Eemaldab kasutajakonto.
+  - Kustutab kasutaja kodukausta (`C:\Users\Nimi`).
 
-Skript vajab töötamiseks järgmisi faile samas kaustas:
+---
 
-| Faili nimi | Kirjeldus |
-| :--- | :--- |
-| `Eesnimed.txt` | Eesnimede lähtefail (üks nimi real). |
-| `Perenimed.txt` | Perenimede lähtefail (üks nimi real). |
-| `Kirjeldused.txt` | Ametikirjelduste/rollide lähtefail. |
-| `new_users_accounts.csv` | **Väljundfail**, mille skript loob. |
+## ⚙️ Nõuded (Prerequisites)
 
-## 🛠️ Kasutamine
+- **OS:** Windows 10 või Windows 11.
+- **PowerShell:** Versioon 5.1 või uuem (soovitatav käivitada administraatorina).
+- **Failid:** Skriptid peavad asuma samas kaustas tekstifailidega (`.txt`).
 
-1. **Lae alla** failid või klooni repositoorium.
-2. **Veendu**, et sisendfailid (`.txt`) sisaldavad andmeid.
-3. **Käivita skript** PowerSheillis mitte hiljema 7 versioni. Pakkumine 7.5.4v.
+---
 
-   ```powershell
-   .\generate_users.ps1
+## 🚀 Kuidas käivitada (Step-by-Step)
+
+### Samm 1: Lae failid alla
+Klooni see repositoorium või lae failid alla oma arvutisse.
+```bash
+git clone https://github.com/SinuKasutaja/Account_creation.git
+cd Account_creation
+
+
+### Samm 2: Luba skriptide käivitamine (TÄHTIS!) ⚠️
+Vaikimisi keelab Windows võõraste skriptide töö (annab vea running scripts is disabled). Selle parandamiseks tee nii:
+
+Ava PowerShell.
+
+Käivita see käsk (lubab sinu kasutajal skripte käivitada):
+
+powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+(Kui küsitakse kinnitust, vajuta Y või A ja Enter)
