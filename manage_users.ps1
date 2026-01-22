@@ -1,40 +1,49 @@
 <#
 .SYNOPSIS
-    Loeb CSV faili ja võimaldab kasutajaid süsteemi lisada või kustutada.
+    Loeb CSV faili ja võimaldab kasutajaid arvutisse lisada või kustutada.
 .DESCRIPTION
-    - Kui kasutaja on olemas, muudab tema parooli.
-    - Kui kasutajat pole, loob uue.
-    - Kustutamisel eemaldab konto ja kodukausta.
+    Skript täidab järgmised ülesanded:
+    1. Kontrollib administraatori õigusi.
+    2. Pakub valikut: Lisa kasutajad või Kustuta üks kasutaja.
+    3. Lisamisel kontrollib nime pikkust, duplikaate ja kirjelduse pikkust.
+    4. Loob kasutaja nõudega vahetada parool esimesel sisselogimisel.
+    5. Kustutamisel eemaldab nii kasutajakonto kui ka kodukausta.
 #>
 
-# --- 1. KONTROLL: KAS ON ADMIN? ---
+# Määrame konsooli kodeeringu UTF-8, et vältida probleeme sümbolitega
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# --- 1. KONTROLL: KAS ON ADMINISTRAATOR? ---
+# Skript vajab kasutajate loomiseks ja kustutamiseks kõrgendatud õigusi
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")
 if (-not $IsAdmin) {
-    Write-Warning "VIGA: Seda skripti peab käivitama ADMINISTRAATORI õigustes!"
+    Write-Warning "VIGA: Seda skripti peab kaivitama ADMINISTRAATORI oigustes!"
     exit
 }
 
-# --- 2. SEADISTUS ---
+# --- 2. SEADISTUS JA FAILIDE LUGEMINE ---
 $CsvFail = "new_users_accounts.csv"
 
+# Kontrollime, kas andmefail on olemas
 if (-not (Test-Path $CsvFail)) {
-    Write-Error "CSV faili '$CsvFail' ei leitud! Käivita enne esimene skript."
+    Write-Error "CSV faili '$CsvFail' ei leitud! Kaivita enne esimene skript."
     exit
 }
 
+# Laeme andmed muutujasse
 $CsvAndmed = Import-Csv -Path $CsvFail -Delimiter ";" -Encoding UTF8
 
-# --- 3. MENÜÜ ---
+# --- 3. PEAMENÜÜ ---
 Clear-Host
 Write-Host "--- KASUTAJATE HALDUS ---" -ForegroundColor Cyan
 Write-Host "Vali tegevus:"
-Write-Host "[L] Lisa/Uuenda kasutajad failist"
-Write-Host "[K] Kustuta üks kasutaja süsteemist"
+Write-Host "[L] Lisa koik kasutajad failist susteemi"
+Write-Host "[K] Kustuta uks kasutaja susteemist"
 $Valik = Read-Host "Sinu valik"
 
-# --- TEGEVUS: LISAMINE / UUENDAMINE ---
+# --- TEGEVUS 1: KASUTAJATE LISAMINE ---
 if ($Valik -match "^(l|L)$") {
-    Write-Host "`nAlustan kasutajate töötlemist..." -ForegroundColor Yellow
+    Write-Host "`nAlustan kasutajate lisamist..." -ForegroundColor Yellow
     
     foreach ($Rida in $CsvAndmed) {
         $User = $Rida.Kasutajanimi
@@ -42,61 +51,55 @@ if ($Valik -match "^(l|L)$") {
         $FullName = "$($Rida.Eesnimi) $($Rida.Perenimi)"
         $Desc = $Rida.Kirjeldus
         
-        # --- KONTROLLID ---
+        # --- KONTROLLID (NÕUDED) ---
+        
+        # 1. Kasutajanimi on liiga pikk (üle 20 tähemärgi)
         if ($User.Length -gt 20) {
-            Write-Warning "VIGA '$User': Nimi liiga pikk (>20). Jätan vahele."
+            Write-Warning "EI SAA LISADA '$User': Kasutajanimi on liiga pikk (>20 marki)."
             continue
         }
 
+        # 2. Kirjeldus on liiga pikk (üle 48 tähemärgi)
+        # Kui on liiga pikk, siis lühendame ja anname hoiatuse
         if ($Desc.Length -gt 48) {
-            Write-Warning "HOIATUS '$User': Kirjeldus liiga pikk. Kärbin 48 märgini."
+            Write-Warning "HOIATUS '$User': Kirjeldus liiga pikk. Karbitud 48 margini."
             $Desc = $Desc.Substring(0, 48)
         }
 
-        $SecurePass = ConvertTo-SecureString $Pass -AsPlainText -Force
-
-        # --- KAS KASUTAJA ON OLEMAS? ---
+        # 3. Kasutaja on juba olemas (Duplikaat)
         if (Get-LocalUser -Name $User -ErrorAction SilentlyContinue) {
-            # KASUTAJA ON OLEMAS -> MUUDAME PAROOLI
-            try {
-                Set-LocalUser -Name $User -Password $SecurePass -Description $Desc -ErrorAction Stop
-                
-                # Nõuame uuesti parooli vahetust, kuna administraator muutis seda
-                # (See käsk võib mõnes Windowsi versioonis erineda, aga proovime standardset)
-                # Set-LocalUser ei toeta otse -PasswordChangeRequiredOnLogin, kasutame WMI/CIM või ignoreerime seda uuendamisel.
-                # Lihtsuse mõttes uuendamisel me ei sunni parooli vahetust uuesti, või teeme seda nii:
-                # $UserObj = [ADSI]"WinNT://./$User,user"
-                # $UserObj.PasswordExpired = 1
-                # $UserObj.SetInfo()
-
-                Write-Host "INFO: Kasutaja '$User' oli juba olemas. PAROOL MUUDETUD." -ForegroundColor Cyan
-            }
-            catch {
-                Write-Error "VIGA '$User' uuendamisel: $($_.Exception.Message)"
-            }
+            Write-Warning "EI SAA LISADA '$User': Kasutaja on juba susteemis olemas (Duplikaat)."
+            # Ülesande järgi ei saa lisada, seega liigume järgmise juurde
+            continue 
         }
-        else {
-            # KASUTAJAT POLE -> LOOME UUE
-            try {
-                New-LocalUser -Name $User `
-                              -Password $SecurePass `
-                              -FullName $FullName `
-                              -Description $Desc `
-                              -PasswordChangeRequiredOnLogin $true `
+
+        # --- KASUTAJA LOOMINE ---
+        try {
+            # Teisendame parooli turvalisele kujule
+            $SecurePass = ConvertTo-SecureString $Pass -AsPlainText -Force
+            
+            # Loome uue kasutaja
+            # -PasswordChangeRequiredOnLogin $true täidab nõude: "esmakordsel sisselogimisel peab kasutaja parooli muutma"
+            New-LocalUser -Name $User `
+                          -Password $SecurePass `
+                          -FullName $FullName `
+                          -Description $Desc `
+                          -PasswordChangeRequiredOnLogin $true `
                               -ErrorAction Stop | Out-Null
-                
-                Add-LocalGroupMember -Group "Users" -Member $User
-                
-                Write-Host "OK: Loodi uus kasutaja '$User'" -ForegroundColor Green
-            }
-            catch {
-                Write-Error "VIGA '$User' loomisel: $($_.Exception.Message)"
-            }
+            
+            # Lisame kasutaja gruppi "Users"
+            Add-LocalGroupMember -Group "Users" -Member $User
+            
+            Write-Host "OK: Loodi kasutaja '$User'. Nouab parooli vahetust." -ForegroundColor Green
+        }
+        catch {
+            Write-Error "VIGA '$User' loomisel: $($_.Exception.Message)"
         }
     }
 
-    # --- LÕPP-RAPORT ---
-    Write-Host "`n--- HETKEL SÜSTEEMIS OLEVAD TAVAKASUTAJAD ---" -ForegroundColor Cyan
+    # --- LÕPP-RAPORT (NÕUE: Näita lisatud kasutajaid) ---
+    Write-Host "`n--- HETKEL ARVUTIS OLEVAD TAVAKASUTAJAD ---" -ForegroundColor Cyan
+    # Filtreerime välja süsteemsed kontod, et näidata ainult loodud kasutajaid
     Get-LocalUser | Where-Object { 
         $_.Enabled -eq $true -and 
         $_.Name -ne "Administrator" -and 
@@ -106,29 +109,33 @@ if ($Valik -match "^(l|L)$") {
     } | Select-Object Name, FullName, Description | Format-Table -AutoSize
 
 }
-# --- TEGEVUS: KUSTUTAMINE ---
+# --- TEGEVUS 2: KASUTAJA KUSTUTAMINE ---
 elseif ($Valik -match "^(k|K)$") {
     
-    $SüsteemiKasutajad = Get-LocalUser | Where-Object { $_.Name -ne "Administrator" -and $_.Name -ne "Guest" -and $_.Name -notmatch "WDAG" }
+    # Leiame kõik tavakasutajad (välistame admini ja guesti)
+    $SusteemiKasutajad = Get-LocalUser | Where-Object { $_.Name -ne "Administrator" -and $_.Name -ne "Guest" -and $_.Name -notmatch "WDAG" }
     
-    if ($SüsteemiKasutajad.Count -eq 0) {
-        Write-Warning "Süsteemis ei leitud ühtegi kustutatavat tavakasutajat."
+    if ($SusteemiKasutajad.Count -eq 0) {
+        Write-Warning "Arvutis ei leitud uhtegi kustutatavat tavakasutajat."
         exit
     }
 
     Write-Host "`n--- VALI KASUTAJA KUSTUTAMISEKS ---" -ForegroundColor Cyan
-    for ($i=0; $i -lt $SüsteemiKasutajad.Count; $i++) {
-        Write-Host "[$($i+1)] $($SüsteemiKasutajad[$i].Name)"
+    # Kuvame nimekirja numbritega
+    for ($i=0; $i -lt $SusteemiKasutajad.Count; $i++) {
+        Write-Host "[$($i+1)] $($SusteemiKasutajad[$i].Name)"
     }
 
     $KustutaValik = Read-Host "`nSisesta number, keda kustutada"
 
-    if ($KustutaValik -match '^\d+$' -and [int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $SüsteemiKasutajad.Count) {
-        $ValitudKasutaja = $SüsteemiKasutajad[[int]$KustutaValik - 1]
+    # Kontrollime, kas sisestati korrektne number
+    if ($KustutaValik -match '^\d+$' -and [int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $SusteemiKasutajad.Count) {
+        $ValitudKasutaja = $SusteemiKasutajad[[int]$KustutaValik - 1]
         $Nimi = $ValitudKasutaja.Name
         
         Write-Host "Kustutan kasutajat '$Nimi'..." -ForegroundColor Yellow
         
+        # 1. Kustutame kasutajakonto
         try {
             Remove-LocalUser -Name $Nimi -ErrorAction Stop
             Write-Host "Kasutaja konto kustutatud." -ForegroundColor Green
@@ -138,6 +145,7 @@ elseif ($Valik -match "^(k|K)$") {
             exit
         }
 
+        # 2. Kustutame kodukausta (NÕUE: Sisseloginud kasutaja kaust kustutada)
         $KoduKaust = "C:\Users\$Nimi"
         if (Test-Path $KoduKaust) {
             Write-Host "Leiti kodukaust: $KoduKaust. Kustutan..."
@@ -146,18 +154,18 @@ elseif ($Valik -match "^(k|K)$") {
                 Write-Host "Kodukaust kustutatud." -ForegroundColor Green
             }
             catch {
-                Write-Warning "Ei saanud kodukausta kustutada. Võib-olla on lukus."
+                Write-Warning "Ei saanud kodukausta kustutada (voib olla lukus voi oiguste probleem)."
             }
         } else {
-            Write-Host "Kodukausta ei olnud." -ForegroundColor Gray
+            Write-Host "Kodukausta ei leitud (kasutaja polnud sisse loginud)." -ForegroundColor Gray
         }
 
     } else {
-        Write-Warning "Vigane valik."
+        Write-Warning "Vigane valik. Skript lopetas too."
     }
 
 } else {
-    Write-Warning "Tundmatu valik. Vali 'L' või 'K'."
+    Write-Warning "Tundmatu valik. Vali 'L' (Lisa) voi 'K' (Kustuta)."
 }
 
-Write-Host "`nSkript lõpetas töö." -ForegroundColor Gray
+Write-Host "`nSkript lopetas too." -ForegroundColor Gray
