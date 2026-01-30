@@ -4,11 +4,9 @@
 #>
 
 # --- SUNNI KONSOOL UTF-8 KODEERINGUSSE ---
-# See rida parandab täpitähtede kuvamise teises arvutis!
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # --- SEADISTUS ---
-# NB! Muutujanimedes väldime täpitähti, aga tekstis (string) on need nüüd OK.
 $Failid = @{
     Eesnimed     = "Eesnimed.txt"
     Perenimed    = "Perenimed.txt"
@@ -100,4 +98,14 @@ $UserList | Export-Csv -Path $Failid.OutputFail -Delimiter ";" -NoTypeInformatio
 
 Write-Host "`n--------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "EDUKAS! Fail salvestatud: $($Failid.OutputFail)" -ForegroundColor Cyan
+Write-Host "--------------------------------------------------------" -ForegroundColor Gray
+
+# --- UUS OSA: TABELI KUJU (TULBAD) ---
+Write-Host "Loodud kasutajad:" -ForegroundColor Yellow
+
+# Select-Object teeb uue vaate:
+# 1. Veerg "Nimi" (liidab ees- ja perenime)
+# 2. Veerg "Kasutajanimi"
+$UserList | Select-Object @{Name='Nimi'; Expression={"$($_.Eesnimi) $($_.Perenimi)"}}, Kasutajanimi | Format-Table -AutoSize
+
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray

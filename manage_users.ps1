@@ -35,7 +35,7 @@ while ($Jatka) {
     Write-Host "Tuvastatud versioon: $($PSVersionTable.PSVersion)" -ForegroundColor Gray
     Write-Host "Vali tegevus:"
     Write-Host "[L] Lisa koik kasutajad failist"
-    Write-Host "[K] Kustuta uks kasutaja (Nae koiki)"
+    Write-Host "[K] Kustuta uks kasutaja"
     Write-Host "[X] Katkesta / Lopeta too"
     
     $Valik = Read-Host "Sinu valik"
@@ -79,16 +79,16 @@ while ($Jatka) {
         Read-Host
     }
 
-    # --- KUSTUTAMINE (UUENDATUD: Näitab kõiki peale iseenda) ---
+    # --- KUSTUTAMINE (UUENDATUD: Värskendab nimekirja alati) ---
     elseif ($Valik -match "^(k|K)$") {
         
         $KustutaJatka = $true
         
         while ($KustutaJatka) {
             Clear-Host
-            Write-Host "--- KUSTUTAMINE (Kõik kasutajad) ---" -ForegroundColor Yellow
+            Write-Host "--- KUSTUTAMINE ---" -ForegroundColor Yellow
             
-            # 1. Leiame kõik süsteemi kasutajad
+            # 1. Leiame IGA KORD kõik süsteemi kasutajad uuesti
             $KõikKasutajad = @()
             try {
                 $KõikKasutajad = Get-LocalUser | Where-Object { 
@@ -111,7 +111,7 @@ while ($Jatka) {
                 Write-Host "Ei leitud uhtegi kustutatavat kasutajat."
             }
            
-            Write-Host "[X] Katkesta ja mine tagasi"
+            Write-Host "[X] Katkesta ja mine tagasi peamenuusse"
 
             $KustutaValik = Read-Host "`nSisesta number voi kasutaja nimi"
 
@@ -120,7 +120,7 @@ while ($Jatka) {
             }
             else {
                 $ValitudNimi = ""
-                # Number valik
+                # Number valik - Parandatud regex!
                 if ($KustutaValik -match '^\d+$' -and $KõikKasutajad.Count -gt 0) {
                     if ([int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $KõikKasutajad.Count) {
                         $ValitudNimi = $KõikKasutajad[[int]$KustutaValik - 1].Name
@@ -154,6 +154,7 @@ while ($Jatka) {
                         Write-Host "Kodukaust kustutatud."
                     }
                     Start-Sleep -Seconds 1
+                    # Tsükkel jätkub, ekraan puhastatakse ja loetakse uuesti kasutajad!
                 }
             }
         }
