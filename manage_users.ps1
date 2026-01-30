@@ -104,7 +104,7 @@ while ($Jatka) {
         Read-Host
     }
 
-    # --- KUSTUTAMINE (UUENDATUD: 'ALL DELETE' tugi) ---
+    # --- KUSTUTAMINE (UUENDATUD: ALL DELETE + DefaultAccount peidetud + ENTER paus) ---
     elseif ($Valik -match "^(k|K)$") {
         
         $KustutaJatka = $true
@@ -113,12 +113,13 @@ while ($Jatka) {
             Clear-Host
             Write-Host "--- KUSTUTAMINE ---" -ForegroundColor Yellow
             
-            # 1. Leiame kasutajad (v.a. admin ja ise)
+            # 1. Leiame kasutajad (v.a. admin, ise ja DefaultAccount)
             $KõikKasutajad = @()
             try {
                 $KõikKasutajad = Get-LocalUser | Where-Object { 
                     $_.Name -ne "Administrator" -and 
                     $_.Name -ne "Guest" -and 
+                    $_.Name -ne "DefaultAccount" -and  # PEIDAME DEFAULT ACCOUNT
                     $_.Name -notmatch "WDAG" -and
                     $_.Name -ne $env:USERNAME 
                 }
@@ -132,20 +133,20 @@ while ($Jatka) {
                     Write-Host "[$($i+1)] $($KõikKasutajad[$i].Name)"
                 }
             } else {
-                Write-Host "Ei leitud kustutatavat kasutajat."
+                Write-Host "Ei leitud uhtegi kustutatavat kasutajat."
             }
            
-            Write-Host "[X] Katkesta ja mine tagasi"
-            Write-Host "Kirjuta 'ALL' et kustutada nimekirjas olevad kasutajad korraga!" -ForegroundColor Red
+            Write-Host "[X] Katkesta ja mine tagasi peamenuusse"
+            Write-Host "Kirjuta 'ALL DELETE' et kustutada KÕIK nimekirjas olevad kasutajad korraga!" -ForegroundColor Red
 
-            $KustutaValik = Read-Host "`nSisesta number, nimi voi 'ALL'"
+            $KustutaValik = Read-Host "`nSisesta number, nimi voi 'ALL DELETE'"
 
             # --- VALIK 1: KATKESTA ---
             if ($KustutaValik -match "^(x|X)$") {
                 $KustutaJatka = $false
             }
             # --- VALIK 2: KUSTUTA KÕIK (ALL DELETE) ---
-            elseif ($KustutaValik -eq "ALL") {
+            elseif ($KustutaValik -eq "ALL DELETE") {
                 if ($KõikKasutajad.Count -gt 0) {
                     Write-Host "`nHOIATUS: Kustutan $($KõikKasutajad.Count) kasutajat..." -ForegroundColor Red
                     Start-Sleep 2
@@ -171,14 +172,14 @@ while ($Jatka) {
                             Write-Host "  - Kodukaust kustutatud" -ForegroundColor Gray
                         }
                     }
-                    Write-Host "`nValitud kasutajad on kustutatud!" -ForegroundColor Yellow
-                    Start-Sleep 3
+                    Write-Host "`nKõik valitud kasutajad on kustutatud. Vajuta ENTER jatkamiseks..." -ForegroundColor Gray
+                    Read-Host # OOTAB ENTERIT
                 } else {
                     Write-Warning "Pole kedagi kustutada."
                     Start-Sleep 2
                 }
             }
-            # --- VALIK 3: ÜKSIK KUSTUTAMINE (Number või Nimi) ---
+            # --- VALIK 3: ÜKSIK KUSTUTAMINE ---
             else {
                 $ValitudNimi = ""
                 # Number valik
@@ -214,11 +215,14 @@ while ($Jatka) {
                         Remove-Item -Path $KoduKaust -Recurse -Force -ErrorAction SilentlyContinue
                         Write-Host "Kodukaust kustutatud."
                     }
-                    Start-Sleep -Seconds 1
+                    
+                    Write-Host "`nKasutaja kustutatud. Vajuta ENTER jatkamiseks..." -ForegroundColor Gray
+                    Read-Host # OOTAB ENTERIT
                 }
             }
         }
     }
+
 
 
     # --- KATKESTA ---
