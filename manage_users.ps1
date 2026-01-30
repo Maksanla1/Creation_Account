@@ -3,7 +3,7 @@
     Loeb CSV faili ja voimaldab kasutajaid arvutisse lisada voi kustutada.
 .DESCRIPTION
     Universaalne skript (PowerShell 5.1 & 7.x).
-    Kustutamisel naitab KOIKI kasutajaid, valja arvatud praegust sisselogitud kasutajat.
+    Parandatud kasutaja olemasolu kontroll.
 #>
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -22,7 +22,7 @@ $CsvFail = "new_users_accounts.csv"
 if (Test-Path $CsvFail) {
     $CsvAndmed = Import-Csv -Path $CsvFail -Delimiter ";" -Encoding UTF8
 } else {
-    Write-Warning "CSV faili '$CsvFail' ei leitud. Lisamine ei toota, kuid kustutamine tootab."
+    Write-Warning "CSV faili '$CsvFail' ei leitud. Lisamine ei toota."
     $CsvAndmed = @()
 }
 
@@ -48,6 +48,10 @@ while ($Jatka) {
         
         foreach ($Rida in $CsvAndmed) {
             $User = $Rida.Kasutajanimi
+            
+            # Lisa kontroll: Kui CSV rida on tühi või nimi puudub
+            if ([string]::IsNullOrWhiteSpace($User)) { continue }
+
             $Pass = $Rida.Parool
             $FullName = "$($Rida.Eesnimi) $($Rida.Perenimi)"
             $Desc = $Rida.Kirjeldus
@@ -55,9 +59,27 @@ while ($Jatka) {
             if ($User.Length -gt 20) { Write-Warning "VIGA: '$User' nimi liiga pikk. Jatan vahele."; continue }
             if ($Desc.Length -gt 48) { $Desc = $Desc.Substring(0, 48) }
             
-            $UserExists = $(net user $User 2>&1) -match "User name"
-            if ($UserExists) { Write-Warning "INFO: '$User' on juba olemas. Jatan vahele."; continue }
+            # --- UUS KONTROLL: KAS KASUTAJA ON OLEMAS? ---
+            $UserExists = $false
+            try {
+                # Proovime leida täpset vastet
+                $Check = Get-LocalUser -Name $User -ErrorAction Stop
+                if ($Check) { $UserExists = $true }
+            } catch {
+                # Kui Get-LocalUser viskab vea (nt "User not found" või Telemetry viga), siis eeldame et pole.
+                # Igaks juhuks kontrollime vana 'net user' käsuga, aga PARANDATUD moel.
+                
+                # 'net user kasutajanimi' tagastab vea koodi 0 kui on olemas, 2 kui pole.
+                $Null = net user $User 2>&1
+                if ($LASTEXITCODE -eq 0) { $UserExists = $true }
+            }
 
+            if ($UserExists) { 
+                Write-Warning "INFO: '$User' on juba olemas. Jatan vahele."
+                continue 
+            }
+
+            # --- LOOMINE ---
             try {
                 $SecurePass = ConvertTo-SecureString $Pass -AsPlainText -Force
                 New-LocalUser -Name $User -Password $SecurePass -FullName $FullName -Description $Desc -ErrorAction Stop | Out-Null
@@ -66,20 +88,23 @@ while ($Jatka) {
                 Write-Host "OK (PS): Loodi kasutaja '$User'." -ForegroundColor Green
             }
             catch {
+                # Kui PS käsk ebaõnnestus (nt Telemetry viga), proovime CMD käsku
                 try {
                     $Null = & net user $User $Pass /ADD /FULLNAME:"$FullName" /COMMENT:"$Desc" /LOGONPASSWORDCHG:YES 2>&1
                     if ($LASTEXITCODE -eq 0) {
                         $Null = & net localgroup Users $User /ADD 2>&1
                         Write-Host "OK (CMD): Loodi kasutaja '$User'." -ForegroundColor Green
+                    } else {
+                        Write-Error "Viga '$User' loomisel (CMD)."
                     }
-                } catch { Write-Error "Viga loomisel." }
+                } catch { Write-Error "Kriitiline viga loomisel." }
             }
         }
         Write-Host "`nTegevus lopetatud. Vajuta ENTER jatkamiseks..." -ForegroundColor Gray
         Read-Host
     }
 
-    # --- KUSTUTAMINE (UUENDATUD: Värskendab nimekirja alati) ---
+    # --- KUSTUTAMINE (JÄÄB SAMAKS) ---
     elseif ($Valik -match "^(k|K)$") {
         
         $KustutaJatka = $true
@@ -88,21 +113,18 @@ while ($Jatka) {
             Clear-Host
             Write-Host "--- KUSTUTAMINE ---" -ForegroundColor Yellow
             
-            # 1. Leiame IGA KORD kõik süsteemi kasutajad uuesti
             $KõikKasutajad = @()
             try {
                 $KõikKasutajad = Get-LocalUser | Where-Object { 
                     $_.Name -ne "Administrator" -and 
                     $_.Name -ne "Guest" -and 
                     $_.Name -notmatch "WDAG" -and
-                    $_.Name -ne $env:USERNAME # VÄLISTAME PRAEGUSE KASUTAJA!
+                    $_.Name -ne $env:USERNAME 
                 }
             } catch {
-                # Fallback CMD
                 Write-Warning "Get-LocalUser ei tootnud. Proovi nime sisestada kasitsi."
             }
             
-            # 2. Näitame nimekirja
             if ($KõikKasutajad.Count -gt 0) {
                 for ($i=0; $i -lt $KõikKasutajad.Count; $i++) {
                     Write-Host "[$($i+1)] $($KõikKasutajad[$i].Name)"
@@ -120,14 +142,11 @@ while ($Jatka) {
             }
             else {
                 $ValitudNimi = ""
-                # Number valik - Parandatud regex!
                 if ($KustutaValik -match '^\d+$' -and $KõikKasutajad.Count -gt 0) {
                     if ([int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $KõikKasutajad.Count) {
                         $ValitudNimi = $KõikKasutajad[[int]$KustutaValik - 1].Name
                     }
-                } 
-                # Nime valik (käsitsi kirjutatud)
-                elseif ($KustutaValik.Length -gt 1) {
+                } elseif ($KustutaValik.Length -gt 1) {
                     if ($KustutaValik -eq $env:USERNAME) {
                         Write-Warning "Sa ei saa kustutada iseennast!"
                         Start-Sleep 2
@@ -145,7 +164,7 @@ while ($Jatka) {
                     } catch {
                         $Null = & net user $ValitudNimi /DELETE 2>&1
                         if ($LASTEXITCODE -eq 0) { Write-Host "Kasutaja konto kustutatud (CMD)." -ForegroundColor Green }
-                        else { Write-Error "Ei saanud kasutajat '$ValitudNimi' kustutada." }
+                        else { Write-Error "Ei saanud kasutajat kustutada." }
                     }
 
                     $KoduKaust = "C:\Users\$ValitudNimi"
@@ -154,7 +173,6 @@ while ($Jatka) {
                         Write-Host "Kodukaust kustutatud."
                     }
                     Start-Sleep -Seconds 1
-                    # Tsükkel jätkub, ekraan puhastatakse ja loetakse uuesti kasutajad!
                 }
             }
         }
