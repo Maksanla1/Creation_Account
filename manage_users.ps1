@@ -114,9 +114,9 @@ while ($Jatka) {
             Write-Host "--- KUSTUTAMINE ---" -ForegroundColor Yellow
             
             # 1. Leiame kasutajad (v.a. admin, ise ja DefaultAccount)
-            $KõikKasutajad = @()
+            $alluser = @()
             try {
-                $KõikKasutajad = Get-LocalUser | Where-Object { 
+                $alluser = Get-LocalUser | Where-Object { 
                     $_.Name -ne "Administrator" -and 
                     $_.Name -ne "Guest" -and 
                     $_.Name -ne "DefaultAccount" -and  # PEIDAME DEFAULT ACCOUNT
@@ -124,34 +124,34 @@ while ($Jatka) {
                     $_.Name -ne $env:USERNAME 
                 }
             } catch {
-                Write-Warning "Get-LocalUser ei tootnud. Proovi nime sisestada kasitsi."
+                Write-Warning "Get-LocalUser ei tootnud. Proovi sisestada: nime"
             }
             
             # 2. Näitame nimekirja
-            if ($KõikKasutajad.Count -gt 0) {
-                for ($i=0; $i -lt $KõikKasutajad.Count; $i++) {
-                    Write-Host "[$($i+1)] $($KõikKasutajad[$i].Name)"
+            if ($alluser.Count -gt 0) {
+                for ($i=0; $i -lt $alluser.Count; $i++) {
+                    Write-Host "[$($i+1)] $($alluser[$i].Name)"
                 }
             } else {
-                Write-Host "Ei leitud uhtegi kustutatavat kasutajat."
+                Write-Host "Ei leitud kustutatavat kasutajat."
             }
            
             Write-Host "[X] Katkesta ja mine tagasi peamenuusse"
-            Write-Host "Kirjuta 'ALL DELETE' et kustutada KÕIK nimekirjas olevad kasutajad korraga!" -ForegroundColor Red
+            Write-Host "Kirjuta 'ALL' et kustutada nimekirjas olevad kasutajad korraga!" -ForegroundColor Red
 
-            $KustutaValik = Read-Host "`nSisesta number, nimi voi 'ALL DELETE'"
+            $KustutaValik = Read-Host "`nSisesta number, nimi voi 'ALL'"
 
             # --- VALIK 1: KATKESTA ---
             if ($KustutaValik -match "^(x|X)$") {
                 $KustutaJatka = $false
             }
             # --- VALIK 2: KUSTUTA KÕIK (ALL DELETE) ---
-            elseif ($KustutaValik -eq "ALL DELETE") {
-                if ($KõikKasutajad.Count -gt 0) {
-                    Write-Host "`nHOIATUS: Kustutan $($KõikKasutajad.Count) kasutajat..." -ForegroundColor Red
+            elseif ($KustutaValik -eq "ALL") {
+                if ($alluser.Count -gt 0) {
+                    Write-Host "`nHOIATUS: Kustutan $($alluser.Count) kasutajat..." -ForegroundColor Red
                     Start-Sleep 2
                     
-                    foreach ($Kasutaja in $KõikKasutajad) {
+                    foreach ($Kasutaja in $alluser) {
                         $Nimi = $Kasutaja.Name
                         Write-Host "Kustutan: $Nimi..."
                         
@@ -172,7 +172,7 @@ while ($Jatka) {
                             Write-Host "  - Kodukaust kustutatud" -ForegroundColor Gray
                         }
                     }
-                    Write-Host "`nKõik valitud kasutajad on kustutatud. Vajuta ENTER jatkamiseks..." -ForegroundColor Gray
+                    Write-Host "`nValitud kasutajad on kustutatud. Vajuta ENTER jatkamiseks..." -ForegroundColor Gray
                     Read-Host # OOTAB ENTERIT
                 } else {
                     Write-Warning "Pole kedagi kustutada."
@@ -183,9 +183,9 @@ while ($Jatka) {
             else {
                 $ValitudNimi = ""
                 # Number valik
-                if ($KustutaValik -match '^\d+$' -and $KõikKasutajad.Count -gt 0) {
-                    if ([int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $KõikKasutajad.Count) {
-                        $ValitudNimi = $KõikKasutajad[[int]$KustutaValik - 1].Name
+                if ($KustutaValik -match '^\d+$' -and $alluser.Count -gt 0) {
+                    if ([int]$KustutaValik -ge 1 -and [int]$KustutaValik -le $alluser.Count) {
+                        $ValitudNimi = $alluser[[int]$KustutaValik - 1].Name
                     }
                 } 
                 # Nime valik
